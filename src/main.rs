@@ -29,10 +29,15 @@ async fn main() {
 
 async fn process_city(city_name: &str) {
     match get_coordinates(city_name).await {
-        Ok((lat, lng)) => println!("lat: {}, lng: {}", lat, lng),
+        Ok((lat, lng)) => match get_weather(lat as u32, lng as u32).await {
+            Ok((weather_description, temperature)) => {
+                println!("City: {}\nLatitude: {:.2}, Longitude: {:.2}\nCurrent Weather: {}\nTemperature: {:.2}°C",
+                city_name, lat, lng, weather_description, temperature);
+            }
+            Err(e) => println!("Error: {:?}", e),
+        },
         Err(e) => println!("Error: {:?}", e),
     }
-    println!("Processing city: {}", city_name);
 }
 
 async fn get_coordinates(city_name: &str) -> Result<(f64, f64), MyError> {
@@ -58,4 +63,23 @@ async fn get_coordinates(city_name: &str) -> Result<(f64, f64), MyError> {
         ))?;
 
     Ok((lat, lng))
+}
+
+async fn get_weather(lat: u32, lon: u32) -> Result<(String, f64), MyError> {
+    dotenv().ok();
+
+    let api_key = env::var("OPEN_WEATHER_API_KEY").expect("OPEN_WEATHER_API_KEY must be set");
+    let api_url = env::var("OPEN_WEATHER_API_URL").expect("OPEN_WEATHER_API_URL must be set");
+    let url = format!(
+        "{}lat={}&lon={}&appid={}&units=metric&exclude=hourly,daily",
+        api_url, lat, lon, api_key
+    );
+
+    let response: serde_json::Value = reqwest::get(&url).await?.json().await?;
+    let weather_description = response["current"]["weather"][0]["description"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let temperature = response["current"]["temp"].as_f64().unwrap();
+    Ok((weather_description, temperature))
 }
